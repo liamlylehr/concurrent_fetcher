@@ -1,0 +1,8 @@
+https://example.com
+https://www.python.org
+https://github.com
+https://httpbin.org/status/404
+https://httpbin.org/status/500
+https://httpbin.org/delay/2
+https://does-not-exist.invalid
+http://localhost:9
