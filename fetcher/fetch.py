@@ -86,6 +86,7 @@ def main(argv: list[str]) -> int:
         urls = read_urls(argv[1])
     except OSError as err:
         print(f"error: cannot read {argv[1]}: {err.strerror}", file=sys.stderr)
+        return 1
 
     # Time the total duration of fetching all urls using fetch_url()
     start = time.perf_counter()
