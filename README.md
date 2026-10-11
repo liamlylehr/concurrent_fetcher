@@ -233,7 +233,7 @@ At this point the project is a small load-processing system rather than a URL do
 - [ ] Ctrl+C shuts down cleanly
 - [ ] Metrics are reported
 - [ ] Tests cover major behavior
-- [ ] Design decisions are documented (below)
+- [ ] Design decisions are documented (below; v0.1 done)
 
 > Most importantly: be able to explain **why every mechanism exists**.
 
@@ -241,6 +241,114 @@ At this point the project is a small load-processing system rather than a URL do
 
 ## Design Notes
 
-_Add a short note per version in your own words: what changed, why the mechanism exists, and
-what you measured._
+_Add a short note per version: what changed, why the mechanism exists, and what was measured._
+
+### v0.1 — Sequential Fetcher
+
+#### How it works
+
+```text
+main(argv)
+ ├─ guard: no file argument → usage on stderr, exit 2
+ ├─ read_urls(path)        strip lines, drop blanks (missing file → stderr, exit 1)
+ ├─ start wall-clock timer
+ ├─ fetch_all(urls)        for each URL, in order:
+ │    └─ fetch_url(url)      timer → httpx.get(timeout=5) → status or error → FetchResult
+ ├─ stop wall-clock timer
+ ├─ summarize_results()    count succeeded / failed (returns numbers, prints nothing)
+ └─ print_results()        one line per result, then the summary
+```
+
+`fetch_url` structure: start the timer, put **only** the risky call in `try`, have `except`
+and `else` set the **same** variables (`status`, `error`), then stop the timer and build one
+`FetchResult` after the `try`, so both paths are timed and both return a result.
+
+#### Checkpoint answers
+
+1. **What blocks during a request?** The whole thread, not just the call. Inside httpx the
+   thread makes a socket read system call, and the OS parks it until bytes arrive. With one
+   thread, nothing else in the program can run.
+2. **What is the process doing while it waits?** Nothing: about 0% CPU. A parked thread isn't
+   scheduled. Check with `time uv run python -m fetcher.fetch urls.txt`: `real` is much
+   larger than `user + sys`.
+3. **Why does a sequential run take ≈ the sum of request times?** Request N can't start until
+   request N−1 returns. Measured: per-request durations summed to 3261.48 ms against a
+   3.2615 s wall-clock total, so the overhead between calls was about 0.04 ms.
+4. **CPU-bound or I/O-bound?** I/O-bound. Test: a CPU twice as fast changes almost nothing;
+   a network twice as fast halves the runtime.
+5. **Why could concurrency help?** The waiting can overlap. Each request takes just as long,
+   but total wall-clock time drops from about the sum of request times to about the slowest
+   one (limited by how many requests can run at once, which is v0.3).
+6. **Failure modes before concurrency:** DNS failure, connection refused, TLS errors,
+   timeouts, malformed URLs, 4xx/5xx responses, redirects, slow DNS, servers that trickle
+   bytes, huge responses, missing input file, rate limiting (429).
+
+#### Concepts to remember
+
+| Concept | Key point |
+|---|---|
+| Blocking I/O | A blocking call doesn't return control to your code until it's done, so a single-threaded program does one thing at a time |
+| Clocks | `perf_counter()` for durations (never goes backwards); `time()` for timestamps (can jump); `process_time()` counts CPU time only, so it's wrong for network waits |
+| Wall-clock vs. summed time | Total time must be measured around the whole run. Summing request durations hides any concurrency speedup in v0.2 |
+| `try / except / else` | Keep `try` minimal. `else` runs only on success. Each branch must set the names used afterwards (otherwise you get `UnboundLocalError`) |
+| Catch narrowly | Catch `httpx.RequestError`, not `Exception`: expected failures become data, bugs still crash loudly |
+| Exception text | `f"{type(err).__name__}: {err}"` stays useful even when the message is empty |
+| `__main__` and `-m` | Code under `if __name__ == "__main__":` runs only when executed, not on import (e.g. by tests) |
+| CLI conventions | `argv[0]` is the program itself. Usage and errors go to stderr. Exit 0 = success, 1 = runtime failure, 2 = usage error. `sys.exit(main(argv))` passes the code to the shell |
+| Separate computing from printing | Functions that return values (`summarize_results`) are easy to test; printing goes in one place |
+| Hidden globals | A function that reads module-level names it wasn't given works by accident and breaks on import. Pass everything in as parameters |
+| f-string format specs | `{x:<40}` left-align, `{x:>6.0f}` right-align with 0 decimals (rounds). Width is a minimum. A spec on `None` raises `TypeError` |
+| Imports and `sys.path` | `python -m` adds the current directory, pytest doesn't. `[tool.pytest.ini_options] pythonpath = ["."]` fixes test imports |
+| `monkeypatch` | Modules are imported once and shared, so `setattr(httpx, "get", fake)` is visible to `fetch.py`. Patch where the name is **looked up**: `from httpx import get` would need `fetcher.fetch.get` patched instead |
+| Test design | Fake the network so tests are fast and deterministic. `parametrize` covers many cases in one test. `pytest.raises` proves bugs aren't swallowed |
+| Two loops vs. one | A second pass over in-memory results costs microseconds against seconds of I/O. At scale the real problem is holding everything in a list, so stream results instead (v0.4/v0.8) |
+
+#### Design decisions
+
+- **4xx/5xx count as success:** the request completed and the server answered, so it has a
+  status code and its latency is real. `[ERR]` means no response at all. Pinned by
+  `test_http_error_status_is_not_a_failure`.
+- **Catch `httpx.RequestError`:** covers DNS, connect, timeout and protocol errors; anything
+  else is a bug and should propagate. Pinned by `test_non_request_errors_are_not_swallowed`.
+- **Explicit `DEFAULT_TIMEOUT = 5`:** makes httpx's default visible; becomes `--timeout`
+  in v0.5.
+- **Blank and whitespace-only lines are skipped** when reading the file, so they don't count
+  as failed requests.
+- **Exit codes:** 0 = ran (even if some URLs failed), 1 = input file unreadable,
+  2 = usage error.
+- **Tests never touch the network:** `httpx.get` is replaced with fakes via `monkeypatch`.
+
+#### Known limitations (revisit later)
+
+- **The timeout isn't a total timeout.** httpx's `timeout=5` applies per phase, and DNS lookup
+  isn't covered. One run saw `example.com` take **107 s**. → v0.5
+- **A server that sends a byte every 4 s** never trips the read timeout. → v0.5
+- **Redirects aren't followed** (httpx default), so a redirecting URL shows `[301]` and counts
+  as success.
+- **`httpx.InvalidURL`** isn't a `RequestError`, so a badly malformed URL can still crash
+  the run.
+- **The whole response body is read into memory**, and all results are held in a list
+  until the end.
+
+#### Mistakes I made (and the lesson)
+
+| Mistake | Lesson |
+|---|---|
+| Ran the module, got no output | Defining functions doesn't run them; you need a `__main__` block |
+| `except ValueError` copied from an example | Read the traceback bottom-up and catch what *your* call raises |
+| `resp` / `status` unassigned on the failure path | Both `except` and `else` must set every name used after the `try` |
+| Dropped `* 1000`, so durations were in seconds | Variable names (`_ms`) are a contract; check units |
+| Timed the print loop, then reset the total to 0 | Put the timer tightly around the work, and don't reuse names |
+| Summed durations for the total | Wall-clock time is measured, not calculated |
+| `print_results` used globals | Pass everything a function needs as parameters |
+| `len(argv) < 1` guard | `argv[0]` is always the program name |
+| `[tool.pytest.ini.options]` | Read config warnings: `Unknown config option` means the section name is wrong |
+
+#### Self-review questions
+
+- Why would the async version report no speedup if the total were the sum of request times?
+- What happens if `fetch_url`'s `except` catches `Exception` and you mistype an attribute name?
+- Why does patching `httpx.get` affect `fetch.py`, and when would it not?
+- Why is `real` ≫ `user + sys` in `time` output evidence of an I/O-bound workload?
+- Why does a 5 s timeout not guarantee a request finishes within 5 s?
 # concurrent_fetcher

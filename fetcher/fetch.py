@@ -81,8 +81,11 @@ def main(argv: list[str]) -> int:
     URL_FILE    text file with one URL per line""", file=sys.stderr)
         return 2
 
-    # Read all the urls from the text file passed in
-    urls = read_urls(argv[1])
+    # Read all the urls from the text file passed in, throw error if file doesn't exist
+    try:
+        urls = read_urls(argv[1])
+    except OSError as err:
+        print(f"error: cannot read {argv[1]}: {err.strerror}", file=sys.stderr)
 
     # Time the total duration of fetching all urls using fetch_url()
     start = time.perf_counter()
