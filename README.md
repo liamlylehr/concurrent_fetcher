@@ -22,16 +22,16 @@ Add dependencies with `uv add <pkg>` (or `uv add --dev <pkg>` for test-only tool
 
 ## Roadmap
 
-| Version | Topic | Status |
-|---|---|---|
-| 0.1 | Sequential fetcher | ☐ |
-| 0.2 | Async fetcher + benchmark | ☐ |
-| 0.3 | Bounded concurrency | ☐ |
-| 0.4 | Producer / consumer queue | ☐ |
-| 0.5 | Timeouts | ☐ |
-| 0.6 | Retries with backoff + jitter | ☐ |
-| 0.7 | Cancellation + graceful shutdown | ☐ |
-| 0.8 | Metrics | ☐ |
+| Version | Topic                            | Status |
+| ------- | -------------------------------- | ------ |
+| 0.1     | Sequential fetcher               | ☐      |
+| 0.2     | Async fetcher + benchmark        | ☐      |
+| 0.3     | Bounded concurrency              | ☐      |
+| 0.4     | Producer / consumer queue        | ☐      |
+| 0.5     | Timeouts                         | ☐      |
+| 0.6     | Retries with backoff + jitter    | ☐      |
+| 0.7     | Cancellation + graceful shutdown | ☐      |
+| 0.8     | Metrics                          | ☐      |
 
 ---
 
@@ -285,23 +285,23 @@ and `else` set the **same** variables (`status`, `error`), then stop the timer a
 
 #### Concepts to remember
 
-| Concept | Key point |
-|---|---|
-| Blocking I/O | A blocking call doesn't return control to your code until it's done, so a single-threaded program does one thing at a time |
-| Clocks | `perf_counter()` for durations (never goes backwards); `time()` for timestamps (can jump); `process_time()` counts CPU time only, so it's wrong for network waits |
-| Wall-clock vs. summed time | Total time must be measured around the whole run. Summing request durations hides any concurrency speedup in v0.2 |
-| `try / except / else` | Keep `try` minimal. `else` runs only on success. Each branch must set the names used afterwards (otherwise you get `UnboundLocalError`) |
-| Catch narrowly | Catch `httpx.RequestError`, not `Exception`: expected failures become data, bugs still crash loudly |
-| Exception text | `f"{type(err).__name__}: {err}"` stays useful even when the message is empty |
-| `__main__` and `-m` | Code under `if __name__ == "__main__":` runs only when executed, not on import (e.g. by tests) |
-| CLI conventions | `argv[0]` is the program itself. Usage and errors go to stderr. Exit 0 = success, 1 = runtime failure, 2 = usage error. `sys.exit(main(argv))` passes the code to the shell |
-| Separate computing from printing | Functions that return values (`summarize_results`) are easy to test; printing goes in one place |
-| Hidden globals | A function that reads module-level names it wasn't given works by accident and breaks on import. Pass everything in as parameters |
-| f-string format specs | `{x:<40}` left-align, `{x:>6.0f}` right-align with 0 decimals (rounds). Width is a minimum. A spec on `None` raises `TypeError` |
-| Imports and `sys.path` | `python -m` adds the current directory, pytest doesn't. `[tool.pytest.ini_options] pythonpath = ["."]` fixes test imports |
-| `monkeypatch` | Modules are imported once and shared, so `setattr(httpx, "get", fake)` is visible to `fetch.py`. Patch where the name is **looked up**: `from httpx import get` would need `fetcher.fetch.get` patched instead |
-| Test design | Fake the network so tests are fast and deterministic. `parametrize` covers many cases in one test. `pytest.raises` proves bugs aren't swallowed |
-| Two loops vs. one | A second pass over in-memory results costs microseconds against seconds of I/O. At scale the real problem is holding everything in a list, so stream results instead (v0.4/v0.8) |
+| Concept                          | Key point                                                                                                                                                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Blocking I/O                     | A blocking call doesn't return control to your code until it's done, so a single-threaded program does one thing at a time                                                                                     |
+| Clocks                           | `perf_counter()` for durations (never goes backwards); `time()` for timestamps (can jump); `process_time()` counts CPU time only, so it's wrong for network waits                                              |
+| Wall-clock vs. summed time       | Total time must be measured around the whole run. Summing request durations hides any concurrency speedup in v0.2                                                                                              |
+| `try / except / else`            | Keep `try` minimal. `else` runs only on success. Each branch must set the names used afterwards (otherwise you get `UnboundLocalError`)                                                                        |
+| Catch narrowly                   | Catch `httpx.RequestError`, not `Exception`: expected failures become data, bugs still crash loudly                                                                                                            |
+| Exception text                   | `f"{type(err).__name__}: {err}"` stays useful even when the message is empty                                                                                                                                   |
+| `__main__` and `-m`              | Code under `if __name__ == "__main__":` runs only when executed, not on import (e.g. by tests)                                                                                                                 |
+| CLI conventions                  | `argv[0]` is the program itself. Usage and errors go to stderr. Exit 0 = success, 1 = runtime failure, 2 = usage error. `sys.exit(main(argv))` passes the code to the shell                                    |
+| Separate computing from printing | Functions that return values (`summarize_results`) are easy to test; printing goes in one place                                                                                                                |
+| Hidden globals                   | A function that reads module-level names it wasn't given works by accident and breaks on import. Pass everything in as parameters                                                                              |
+| f-string format specs            | `{x:<40}` left-align, `{x:>6.0f}` right-align with 0 decimals (rounds). Width is a minimum. A spec on `None` raises `TypeError`                                                                                |
+| Imports and `sys.path`           | `python -m` adds the current directory, pytest doesn't. `[tool.pytest.ini_options] pythonpath = ["."]` fixes test imports                                                                                      |
+| `monkeypatch`                    | Modules are imported once and shared, so `setattr(httpx, "get", fake)` is visible to `fetch.py`. Patch where the name is **looked up**: `from httpx import get` would need `fetcher.fetch.get` patched instead |
+| Test design                      | Fake the network so tests are fast and deterministic. `parametrize` covers many cases in one test. `pytest.raises` proves bugs aren't swallowed                                                                |
+| Two loops vs. one                | A second pass over in-memory results costs microseconds against seconds of I/O. At scale the real problem is holding everything in a list, so stream results instead (v0.4/v0.8)                               |
 
 #### Design decisions
 
@@ -332,17 +332,17 @@ and `else` set the **same** variables (`status`, `error`), then stop the timer a
 
 #### Mistakes I made (and the lesson)
 
-| Mistake | Lesson |
-|---|---|
-| Ran the module, got no output | Defining functions doesn't run them; you need a `__main__` block |
-| `except ValueError` copied from an example | Read the traceback bottom-up and catch what *your* call raises |
-| `resp` / `status` unassigned on the failure path | Both `except` and `else` must set every name used after the `try` |
-| Dropped `* 1000`, so durations were in seconds | Variable names (`_ms`) are a contract; check units |
-| Timed the print loop, then reset the total to 0 | Put the timer tightly around the work, and don't reuse names |
-| Summed durations for the total | Wall-clock time is measured, not calculated |
-| `print_results` used globals | Pass everything a function needs as parameters |
-| `len(argv) < 1` guard | `argv[0]` is always the program name |
-| `[tool.pytest.ini.options]` | Read config warnings: `Unknown config option` means the section name is wrong |
+| Mistake                                          | Lesson                                                                        |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Ran the module, got no output                    | Defining functions doesn't run them; you need a `__main__` block              |
+| `except ValueError` copied from an example       | Read the traceback bottom-up and catch what _your_ call raises                |
+| `resp` / `status` unassigned on the failure path | Both `except` and `else` must set every name used after the `try`             |
+| Dropped `* 1000`, so durations were in seconds   | Variable names (`_ms`) are a contract; check units                            |
+| Timed the print loop, then reset the total to 0  | Put the timer tightly around the work, and don't reuse names                  |
+| Summed durations for the total                   | Wall-clock time is measured, not calculated                                   |
+| `print_results` used globals                     | Pass everything a function needs as parameters                                |
+| `len(argv) < 1` guard                            | `argv[0]` is always the program name                                          |
+| `[tool.pytest.ini.options]`                      | Read config warnings: `Unknown config option` means the section name is wrong |
 
 #### Self-review questions
 
@@ -351,4 +351,3 @@ and `else` set the **same** variables (`status`, `error`), then stop the timer a
 - Why does patching `httpx.get` affect `fetch.py`, and when would it not?
 - Why is `real` ≫ `user + sys` in `time` output evidence of an I/O-bound workload?
 - Why does a 5 s timeout not guarantee a request finishes within 5 s?
-# concurrent_fetcher
